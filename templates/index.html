@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facial Expression Recognition</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-box {
+            border: 2px dashed #aaa;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .upload-box:hover {
+            border-color: #4CAF50;
+            background-color: #f0fff0;
+        }
+        #fileInput {
+            display: none;
+        }
+        #imagePreview {
+            max-width: 300px;
+            max-height: 300px;
+            display: block;
+            margin: 20px auto;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .results {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .emotion-item {
+            margin: 15px 0;
+        }
+        .emotion-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        .progress-container {
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+        .error {
+            color: #f44336;
+            padding: 15px;
+            background: #ffebee;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .loading {
+            color: #2196F3;
+            text-align: center;
+            font-style: italic;
+            padding: 20px;
+        }
+        .instructions {
+            color: #666;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Facial Expression Recognition</h1>
+        <p class="instructions">Upload a clear photo of a face to analyze emotional expressions</p>
+        
+        <div class="upload-box" id="dropZone">
+            <h3>📤 Upload Image</h3>    
+            <input type="file" id="fileInput" accept="image/*">
+            <img id="imagePreview" style="display: none;">
+        </div>
+        
+        <div id="results">
+            <!-- Results will appear here -->
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const resultsDiv = document.getElementById('results');
+
+        // Handle click on drop zone
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        // Handle file selection
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                const file = e.target.files[0];
+                processImage(file);
+            }
+        });
+
+        // Handle drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#4CAF50';
+            dropZone.style.backgroundColor = '#f0fff0';
+        });
+
+        ['dragleave', 'dragend'].forEach(type => {
+            dropZone.addEventListener(type, () => {
+                dropZone.style.borderColor = '#aaa';
+                dropZone.style.backgroundColor = '#fafafa';
+            });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#aaa';
+            dropZone.style.backgroundColor = '#fafafa';
+            
+            if (e.dataTransfer.files.length) {
+                const file = e.dataTransfer.files[0];
+                fileInput.files = e.dataTransfer.files;
+                processImage(file);
+            }
+        });
+
+        function processImage(file) {
+            // Display preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                imagePreview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+            
+            // Clear previous results
+            resultsDiv.innerHTML = '<div class="loading">Analyzing image...</div>';
+            
+            // Send to server
+            analyzeImage(file);
+        }
+
+        function analyzeImage(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.error || 'Server error') });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                displayResults(data);
+            })
+            .catch(error => {
+                showError(error.message);
+            });
+        }
+
+        function displayResults(results) {
+            let html = '<div class="results"><h2>Analysis Results</h2>';
+            
+            // Sort by highest probability first
+            const sortedResults = Object.entries(results)
+                .sort((a, b) => b[1] - a[1]);
+            
+            sortedResults.forEach(([emotion, probability]) => {
+                html += `
+                    <div class="emotion-item">
+                        <div class="emotion-label">
+                            <span>${emotion}</span>
+                            <span>${probability.toFixed(1)}%</span>
+                        </div>
+                        <div class="progress-container">
+                            <div class="progress-bar" style="width: ${probability}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+        }
+
+        function showError(message) {
+            resultsDiv.innerHTML = `
+                <div class="error">
+                    <strong>⚠️ Error:</strong> ${message}
+                    <p>Please try with a different image</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
